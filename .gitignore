@@ -3,6 +3,7 @@
 /build
 /tags
 log/
+wallet/
 
 # vim swap files
 *.swp
@@ -104,3 +105,4 @@ local.properties
 .idea/
 
 /testnet
+.vscode/*

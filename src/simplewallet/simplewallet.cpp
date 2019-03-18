@@ -43,6 +43,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/format.hpp>
 #include <boost/regex.hpp>
+#include <boost/range/adaptor/transformed.hpp>
+#include <cpr/cpr.h>
 #include "include_base_utils.h"
 #include "common/i18n.h"
 #include "common/command_line.h"
@@ -58,6 +60,8 @@
 #include "crypto/crypto.h"  // for crypto::secret_key definition
 #include "mnemonics/electrum-words.h"
 #include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
 #include "common/json_util.h"
 #include "ringct/rctSigs.h"
 #include "multisig/multisig.h"
@@ -77,6 +81,7 @@
 using namespace std;
 using namespace epee;
 using namespace cryptonote;
+using namespace rapidjson;
 using boost::lexical_cast;
 namespace po = boost::program_options;
 typedef cryptonote::simple_wallet sw;
@@ -233,6 +238,83 @@ namespace
   tools::scoped_message_writer fail_msg_writer()
   {
     return tools::scoped_message_writer(console_color_red, true, sw::tr("Error: "), el::Level::Error);
+  }
+
+cpr::Response makeXmrtoPostRequest(string data, string url) {
+    return cpr::Post(
+        cpr::Url{url},
+        cpr::Body(data),
+        cpr::Header{{"Content-Type", "application/json"}},
+        cpr::VerifySsl{false} // find a solution..
+    );
+}
+
+string createOrder(string btcAddress, uint64_t btcAmount, bool isStagenet) {
+    string xmrUrlBase = "https://xmr.to/";
+    if (isStagenet) {
+      xmrUrlBase = "https://test.xmr.to/";
+    }
+    success_msg_writer() <<"Creating XMR.to("<<xmrUrlBase<<") order...";
+    rapidjson::Document d;
+    d.SetObject();
+    rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
+    string key_address = "btc_dest_address";
+    Value address_value(btcAddress.c_str(), allocator);
+    Value address_key(key_address.c_str(), allocator);
+    d.AddMember(address_key, address_value, allocator);
+    string key_amount = "btc_amount";
+    Value amount_value(std::to_string(btcAmount).c_str(), allocator);
+    Value amount_key(key_amount.c_str(), allocator);
+    d.AddMember(amount_key, amount_value, allocator);
+
+    // Convert JSON document to string
+    rapidjson::StringBuffer strbuf;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
+    d.Accept(writer);
+    auto response = makeXmrtoPostRequest(strbuf.GetString(), xmrUrlBase + "api/v2/xmr2btc/order_create/");
+    rapidjson::Document responseJson;
+    responseJson.Parse(response.text.c_str());
+    return responseJson["uuid"].GetString();
+}
+
+rapidjson::Document getOrderInfo(string orderUuid) {
+    rapidjson::Document d;
+    d.SetObject();
+    rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
+    string key_uuid = "uuid";
+    Value value(orderUuid.c_str(), allocator);
+    Value key(key_uuid.c_str(), allocator);
+    d.AddMember(key, value, allocator);
+    rapidjson::StringBuffer strbuf;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
+    d.Accept(writer);
+    auto response = makeXmrtoPostRequest(strbuf.GetString(), "https://test.xmr.to/api/v2/xmr2btc/order_status_query/");
+    rapidjson::Document responseJson;
+    responseJson.Parse(response.text.c_str());
+    return responseJson;
+}
+
+void waitForOrderState(string orderUuid, string state) {
+    while(getOrderInfo(orderUuid)["state"].GetString() != state) sleep(1.5);
+}
+
+std::vector<std::string> getTransactionData(string orderUuid) {
+    rapidjson::Document orderData = getOrderInfo(orderUuid);
+    double amountToPay = orderData["xmr_amount_remaining"].GetDouble();
+    string integratedAddress = orderData["xmr_receiving_integrated_address"].GetString();
+    success_msg_writer() <<"Address to send XMR: "<<integratedAddress;
+    success_msg_writer() <<"Amount to pay: "<<amountToPay<<"\n";
+    success_msg_writer() <<"Initializing transfer to XMR.to...";
+    std::vector<std::string> transactionArgs{integratedAddress, std::to_string(amountToPay)};
+    return transactionArgs;
+}
+
+  bool validate_bitcoin_address(std::string btc_address, bool stagenet) {
+      if (stagenet) {
+        return (btc_address.length() <= 35) && ('m' == btc_address.at(0) || 'n' == btc_address.at(0) || '2' == btc_address.at(0));
+      } else {
+        return (btc_address.length() <= 35) && ('1' == btc_address.at(0) || '3' == btc_address.at(0));
+      }
   }
 
   bool parse_bool(const std::string& s, bool& result)
@@ -4880,8 +4962,15 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
 
     if (!r)
     {
-      fail_msg_writer() << tr("failed to parse address");
-      return true;
+      bool is_stagenet = m_wallet->nettype() == cryptonote::STAGENET;
+      bool is_bitcoin_address = validate_bitcoin_address(local_args[i - 2], is_stagenet);
+
+      if (!is_bitcoin_address)
+        fail_msg_writer() << tr("failed to parse address");
+      else {
+        create_xmrto_transaction(local_args[i - 2], stoi(local_args[i - 1]));
+      }
+      return false;
     }
     de.addr = info.address;
     de.is_subaddress = info.is_subaddress;
@@ -5838,8 +5927,18 @@ bool simple_wallet::donate(const std::vector<std::string> &args_)
     local_args.pop_back();
   }
   // get amount and pop
-  amount_str = local_args.back();
-  local_args.pop_back();
+  uint64_t amount;
+  bool ok = cryptonote::parse_amount(amount, local_args.back());
+  if (ok && amount != 0)
+  {
+    amount_str = local_args.back();
+    local_args.pop_back();
+  }
+  else
+  {
+    fail_msg_writer() << tr("amount is wrong: ") << local_args.back() << ", " << tr("expected number from 0 to ") << print_money(std::numeric_limits<uint64_t>::max());
+    return true;
+  }
   // push back address, amount, payment id
   local_args.push_back(MONERO_DONATION_ADDR);
   local_args.push_back(amount_str);
@@ -8092,6 +8191,15 @@ void simple_wallet::commit_or_save(std::vector<tools::wallet2::pending_tx>& ptx_
     // if no exception, remove element from vector
     ptx_vector.pop_back();
   }
+}
+
+void simple_wallet::create_xmrto_transaction(string btcAddress, uint64_t btcAmount) {
+    string orderUuid = createOrder(btcAddress, btcAmount, m_wallet->nettype() == STAGENET);
+    success_msg_writer() <<"Order uuid is: "<<orderUuid<<"\n";
+    success_msg_writer() <<"Waiting for XMR.to to create an order..."<<"\n";
+    waitForOrderState(orderUuid, "UNPAID");
+    std::vector<std::string> args = getTransactionData(orderUuid);
+    transfer(args);
 }
 //----------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])

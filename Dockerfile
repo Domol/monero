@@ -18,14 +18,18 @@ RUN set -ex && \
         libtool-bin \
         autoconf \
         automake \
-        bzip2
+        bzip2 \
+        xsltproc \
+        gperf \
+        unzip \
+        libssl-dev
 
 WORKDIR /usr/local
 
 #Cmake
-ARG CMAKE_VERSION=3.12.1
-ARG CMAKE_VERSION_DOT=v3.12
-ARG CMAKE_HASH=c53d5c2ce81d7a957ee83e3e635c8cda5dfe20c9d501a4828ee28e1615e57ab2
+ARG CMAKE_VERSION=3.13.0
+ARG CMAKE_VERSION_DOT=v3.13
+ARG CMAKE_HASH=4058b2f1a53c026564e8936698d56c3b352d90df067b195cb749a97a3d273c90
 RUN set -ex \
     && curl -s -O https://cmake.org/files/${CMAKE_VERSION_DOT}/cmake-${CMAKE_VERSION}.tar.gz \
     && echo "${CMAKE_HASH}  cmake-${CMAKE_VERSION}.tar.gz" | sha256sum -c \
