@@ -254,7 +254,7 @@ string createOrder(string btcAddress, uint64_t btcAmount, bool isStagenet) {
     if (isStagenet) {
       xmrUrlBase = "https://test.xmr.to/";
     }
-    success_msg_writer() <<"Creating XMR.to("<<xmrUrlBase<<") order...";
+    success_msg_writer() <<"Creating XMR.to order...";
     rapidjson::Document d;
     d.SetObject();
     rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
@@ -277,7 +277,11 @@ string createOrder(string btcAddress, uint64_t btcAmount, bool isStagenet) {
     return responseJson["uuid"].GetString();
 }
 
-rapidjson::Document getOrderInfo(string orderUuid) {
+rapidjson::Document getOrderInfo(string orderUuid, bool isStagenet) {
+    string xmrUrlBase = "https://xmr.to/";
+    if (isStagenet) {
+      xmrUrlBase = "https://test.xmr.to/";
+    }
     rapidjson::Document d;
     d.SetObject();
     rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
@@ -288,25 +292,27 @@ rapidjson::Document getOrderInfo(string orderUuid) {
     rapidjson::StringBuffer strbuf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
     d.Accept(writer);
-    auto response = makeXmrtoPostRequest(strbuf.GetString(), "https://test.xmr.to/api/v2/xmr2btc/order_status_query/");
+    auto response = makeXmrtoPostRequest(strbuf.GetString(), xmrUrlBase + "api/v2/xmr2btc/order_status_query/");
     rapidjson::Document responseJson;
     responseJson.Parse(response.text.c_str());
     return responseJson;
 }
 
-void waitForOrderState(string orderUuid, string state) {
-    while(getOrderInfo(orderUuid)["state"].GetString() != state) sleep(1.5);
+void waitForOrderState(string orderUuid, string state, bool isStagenet) {
+    while(getOrderInfo(orderUuid, isStagenet)["state"].GetString() != state) sleep(1.5);
 }
 
-std::vector<std::string> getTransactionData(string orderUuid) {
-    rapidjson::Document orderData = getOrderInfo(orderUuid);
+std::vector<std::string> getTransactionData(string orderUuid, bool isStagenet) {
+    rapidjson::Document orderData = getOrderInfo(orderUuid, isStagenet);
     double amountToPay = orderData["xmr_amount_remaining"].GetDouble();
     string integratedAddress = orderData["xmr_receiving_integrated_address"].GetString();
     success_msg_writer() <<"Address to send XMR: "<<integratedAddress;
     success_msg_writer() <<"Amount to pay: "<<amountToPay<<"\n";
-    success_msg_writer() <<"Initializing transfer to XMR.to...";
-    std::vector<std::string> transactionArgs{integratedAddress, std::to_string(amountToPay)};
-    return transactionArgs;
+    std::vector<std::string> local_args = {};
+//    std::vector<std::string> transactionArgs{integratedAddress, std::to_string(amountToPay)};
+    local_args.push_back(integratedAddress);
+    local_args.push_back(std::to_string(amountToPay));
+    return local_args;
 }
 
   bool validate_bitcoin_address(std::string btc_address, bool stagenet) {
@@ -4969,6 +4975,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
         fail_msg_writer() << tr("failed to parse address");
       else {
         create_xmrto_transaction(local_args[i - 2], stoi(local_args[i - 1]));
+        return true;
       }
       return false;
     }
@@ -8197,9 +8204,10 @@ void simple_wallet::create_xmrto_transaction(string btcAddress, uint64_t btcAmou
     string orderUuid = createOrder(btcAddress, btcAmount, m_wallet->nettype() == STAGENET);
     success_msg_writer() <<"Order uuid is: "<<orderUuid<<"\n";
     success_msg_writer() <<"Waiting for XMR.to to create an order..."<<"\n";
-    waitForOrderState(orderUuid, "UNPAID");
-    std::vector<std::string> args = getTransactionData(orderUuid);
-    transfer(args);
+    waitForOrderState(orderUuid, "UNPAID", m_wallet->nettype() == STAGENET);
+    std::vector<std::string> args = getTransactionData(orderUuid, m_wallet->nettype() == STAGENET);
+//    success_msg_writer() <<"Initializing transfer to XMR.to...";
+//    transfer(args);
 }
 //----------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
