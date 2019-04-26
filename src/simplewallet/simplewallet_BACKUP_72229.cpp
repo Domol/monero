@@ -368,6 +368,8 @@ namespace
     return tools::scoped_message_writer(console_color_red, true, sw::tr("Error: "), el::Level::Error);
   }
 
+<<<<<<< HEAD
+=======
 cpr::Response makeXmrtoPostRequest(string data, string url) {
     return cpr::Post(
         cpr::Url{url},
@@ -451,6 +453,7 @@ std::vector<std::string> getTransactionData(string orderUuid, bool isStagenet) {
       }
   }
 
+>>>>>>> df6c72a8a... Use url based on network.
   bool parse_bool(const std::string& s, bool& result)
   {
     if (s == "1" || command_line::is_yes(s))
@@ -6659,6 +6662,9 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
 
     if (!r)
     {
+<<<<<<< HEAD
+      fail_msg_writer() << tr("failed to parse address");
+=======
       bool is_stagenet = m_wallet->nettype() == cryptonote::STAGENET;
       bool is_bitcoin_address = validate_bitcoin_address(local_args[i - 2], is_stagenet);
 
@@ -6668,6 +6674,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
         create_xmrto_transaction(local_args[i - 2], stoi(local_args[i - 1]));
         return true;
       }
+>>>>>>> df6c72a8a... Use url based on network.
       return false;
     }
     de.addr = info.address;
@@ -6786,7 +6793,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
         {
           fail_msg_writer() << tr("transaction cancelled.");
 
-          return false;
+          return false; 
         }
       }
     }
@@ -7712,7 +7719,7 @@ bool simple_wallet::donate(const std::vector<std::string> &args_)
     local_args.pop_back();
   }
   else
-  {
+  { 
     fail_msg_writer() << tr("amount is wrong: ") << local_args.back() << ", " << tr("expected number from 0 to ") << print_money(std::numeric_limits<uint64_t>::max());
     return true;
   }
@@ -10142,7 +10149,7 @@ bool simple_wallet::import_key_images(const std::vector<std::string> &args)
     uint64_t spent = 0, unspent = 0;
     uint64_t height = m_wallet->import_key_images(filename, spent, unspent);
     success_msg_writer() << "Signed key images imported to height " << height << ", "
-        << print_money(spent) << " spent, " << print_money(unspent) << " unspent";
+        << print_money(spent) << " spent, " << print_money(unspent) << " unspent"; 
   }
   catch (const std::exception &e)
   {
@@ -10508,6 +10515,8 @@ void simple_wallet::commit_or_save(std::vector<tools::wallet2::pending_tx>& ptx_
     ptx_vector.pop_back();
   }
 }
+<<<<<<< HEAD
+=======
 
 void simple_wallet::create_xmrto_transaction(string btcAddress, uint64_t btcAmount) {
     string orderUuid = createOrder(btcAddress, btcAmount, m_wallet->nettype() == STAGENET);
@@ -10518,6 +10527,7 @@ void simple_wallet::create_xmrto_transaction(string btcAddress, uint64_t btcAmou
 //    success_msg_writer() <<"Initializing transfer to XMR.to...";
 //    transfer(args);
 }
+>>>>>>> df6c72a8a... Use url based on network.
 //----------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
