@@ -6667,7 +6667,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
         return true;
       }
       else {
-        create_xmrto_transaction(local_args[i - 2], local_args[i - 1], de);
+        create_xmrto_transaction(local_args[i - 2], local_args[i - 1], de, info);
       }
     }
     de.addr = info.address;
@@ -10509,7 +10509,7 @@ void simple_wallet::commit_or_save(std::vector<tools::wallet2::pending_tx>& ptx_
   }
 }
 
-void simple_wallet::create_xmrto_transaction(string btcAddress, string btcAmount, cryptonote::tx_destination_entry& de) {
+void simple_wallet::create_xmrto_transaction(string btcAddress, string btcAmount, cryptonote::tx_destination_entry& de, address_parse_info& info) {
     string orderUuid = createOrder(btcAddress, btcAmount, m_wallet->nettype() == STAGENET);
     success_msg_writer() <<"Order uuid is: "<<orderUuid<<"\n";
     success_msg_writer() <<"Waiting for XMR.to to create an order..."<<"\n";
@@ -10517,6 +10517,7 @@ void simple_wallet::create_xmrto_transaction(string btcAddress, string btcAmount
     std::vector<std::string> args = getTransactionData(orderUuid, m_wallet->nettype() == STAGENET);
     success_msg_writer() <<"Initializing transfer to XMR.to...";
     cryptonote::parse_amount(de.amount, args[1]);
+    cryptonote::get_account_address_from_str_or_url(info, m_wallet->nettype(), args[0], oa_prompter);
     de.original = args[0];
 }
 //----------------------------------------------------------------------------------------------------
