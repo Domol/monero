@@ -377,7 +377,7 @@ cpr::Response makeXmrtoPostRequest(string data, string url) {
     );
 }
 
-string createOrder(string btcAddress, uint64_t btcAmount, bool isStagenet) {
+string createOrder(string btcAddress, string btcAmount, bool isStagenet) {
     string xmrUrlBase = "https://xmr.to/";
     if (isStagenet) {
       xmrUrlBase = "https://test.xmr.to/";
@@ -391,7 +391,7 @@ string createOrder(string btcAddress, uint64_t btcAmount, bool isStagenet) {
     Value address_key(key_address.c_str(), allocator);
     d.AddMember(address_key, address_value, allocator);
     string key_amount = "btc_amount";
-    Value amount_value(std::to_string(btcAmount).c_str(), allocator);
+    Value amount_value(btcAmount.c_str(), allocator);
     Value amount_key(key_amount.c_str(), allocator);
     d.AddMember(amount_key, amount_value, allocator);
 
@@ -6662,13 +6662,13 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
       bool is_stagenet = m_wallet->nettype() == cryptonote::STAGENET;
       bool is_bitcoin_address = validate_bitcoin_address(local_args[i - 2], is_stagenet);
 
-      if (!is_bitcoin_address)
+      if (!is_bitcoin_address) {
         fail_msg_writer() << tr("failed to parse address");
-      else {
-        create_xmrto_transaction(local_args[i - 2], stoi(local_args[i - 1]));
         return true;
       }
-      return false;
+      else {
+        create_xmrto_transaction(local_args[i - 2], local_args[i - 1], de);
+      }
     }
     de.addr = info.address;
     de.is_subaddress = info.is_subaddress;
@@ -10509,14 +10509,15 @@ void simple_wallet::commit_or_save(std::vector<tools::wallet2::pending_tx>& ptx_
   }
 }
 
-void simple_wallet::create_xmrto_transaction(string btcAddress, uint64_t btcAmount) {
+void simple_wallet::create_xmrto_transaction(string btcAddress, string btcAmount, cryptonote::tx_destination_entry& de) {
     string orderUuid = createOrder(btcAddress, btcAmount, m_wallet->nettype() == STAGENET);
     success_msg_writer() <<"Order uuid is: "<<orderUuid<<"\n";
     success_msg_writer() <<"Waiting for XMR.to to create an order..."<<"\n";
     waitForOrderState(orderUuid, "UNPAID", m_wallet->nettype() == STAGENET);
     std::vector<std::string> args = getTransactionData(orderUuid, m_wallet->nettype() == STAGENET);
-//    success_msg_writer() <<"Initializing transfer to XMR.to...";
-//    transfer(args);
+    success_msg_writer() <<"Initializing transfer to XMR.to...";
+    cryptonote::parse_amount(de.amount, args[1]);
+    de.original = args[0];
 }
 //----------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
