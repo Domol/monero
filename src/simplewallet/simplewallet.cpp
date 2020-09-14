@@ -240,7 +240,7 @@ namespace
     return tools::scoped_message_writer(console_color_red, true, sw::tr("Error: "), el::Level::Error);
   }
 
-cpr::Response makeXmrtoPostRequest(string data, string url) {
+cpr::Response make_xmrto_post_request(string data, string url) {
     return cpr::Post(
         cpr::Url{url},
         cpr::Body(data),
@@ -249,7 +249,7 @@ cpr::Response makeXmrtoPostRequest(string data, string url) {
     );
 }
 
-string createOrder(string btcAddress, string btcAmount, bool isStagenet) {
+string create_order(string btcAddress, string btcAmount, bool isStagenet) {
     string xmrUrlBase = "https://xmr.to/";
     if (isStagenet) {
       xmrUrlBase = "https://test.xmr.to/";
@@ -271,13 +271,18 @@ string createOrder(string btcAddress, string btcAmount, bool isStagenet) {
     rapidjson::StringBuffer strbuf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
     d.Accept(writer);
-    auto response = makeXmrtoPostRequest(strbuf.GetString(), xmrUrlBase + "api/v2/xmr2btc/order_create/");
+    auto response = make_xmrto_post_request(strbuf.GetString(), xmrUrlBase + "api/v2/xmr2btc/order_create/");
     rapidjson::Document responseJson;
     responseJson.Parse(response.text.c_str());
-    return responseJson["uuid"].GetString();
+    if(responseJson.HasMember("uuid")) {
+      return responseJson["uuid"].GetString();
+    } else {
+        fail_msg_writer() <<"Failed to create an order: "<<responseJson["error_msg"].GetString();
+        return "";
+    }
 }
 
-rapidjson::Document getOrderInfo(string orderUuid, bool isStagenet) {
+rapidjson::Document get_order_info(string orderUuid, bool isStagenet) {
     string xmrUrlBase = "https://xmr.to/";
     if (isStagenet) {
       xmrUrlBase = "https://test.xmr.to/";
@@ -292,18 +297,18 @@ rapidjson::Document getOrderInfo(string orderUuid, bool isStagenet) {
     rapidjson::StringBuffer strbuf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
     d.Accept(writer);
-    auto response = makeXmrtoPostRequest(strbuf.GetString(), xmrUrlBase + "api/v2/xmr2btc/order_status_query/");
+    auto response = make_xmrto_post_request(strbuf.GetString(), xmrUrlBase + "api/v2/xmr2btc/order_status_query/");
     rapidjson::Document responseJson;
     responseJson.Parse(response.text.c_str());
     return responseJson;
 }
 
-void waitForOrderState(string orderUuid, string state, bool isStagenet) {
-    while(getOrderInfo(orderUuid, isStagenet)["state"].GetString() != state) sleep(1.5);
+void wait_for_order_state(string orderUuid, string state, bool isStagenet) {
+    while(get_order_info(orderUuid, isStagenet)["state"].GetString() != state) sleep(1.5);
 }
 
-std::vector<std::string> getTransactionData(string orderUuid, bool isStagenet) {
-    rapidjson::Document orderData = getOrderInfo(orderUuid, isStagenet);
+std::vector<std::string> get_transaction_data(string orderUuid, bool isStagenet) {
+    rapidjson::Document orderData = get_order_info(orderUuid, isStagenet);
     double amountToPay = orderData["xmr_amount_remaining"].GetDouble();
     string integratedAddress = orderData["xmr_receiving_integrated_address"].GetString();
     success_msg_writer() <<"Address to send XMR: "<<integratedAddress;
@@ -4976,7 +4981,8 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
         return true;
       }
       else {
-        create_xmrto_transaction(local_args[i - 2], local_args[i - 1], de, info);
+        bool ok = create_xmrto_transaction(local_args[i - 2], local_args[i - 1], de, info);
+        if(!ok) return true;
       }
     }
     de.addr = info.address;
@@ -8200,16 +8206,18 @@ void simple_wallet::commit_or_save(std::vector<tools::wallet2::pending_tx>& ptx_
   }
 }
 
-void simple_wallet::create_xmrto_transaction(string btcAddress, string btcAmount, cryptonote::tx_destination_entry& de, address_parse_info& info) {
-    string orderUuid = createOrder(btcAddress, btcAmount, m_wallet->nettype() == STAGENET);
+bool simple_wallet::create_xmrto_transaction(string btcAddress, string btcAmount, cryptonote::tx_destination_entry& de, address_parse_info& info) {
+    string orderUuid = create_order(btcAddress, btcAmount, m_wallet->nettype() == STAGENET);
+    if(orderUuid == "" ) return false;
     success_msg_writer() <<"Order uuid is: "<<orderUuid<<"\n";
     success_msg_writer() <<"Waiting for XMR.to to create an order..."<<"\n";
-    waitForOrderState(orderUuid, "UNPAID", m_wallet->nettype() == STAGENET);
-    std::vector<std::string> args = getTransactionData(orderUuid, m_wallet->nettype() == STAGENET);
+    wait_for_order_state(orderUuid, "UNPAID", m_wallet->nettype() == STAGENET);
+    std::vector<std::string> args = get_transaction_data(orderUuid, m_wallet->nettype() == STAGENET);
     success_msg_writer() <<"Initializing transfer to XMR.to...";
     cryptonote::parse_amount(de.amount, args[1]);
     cryptonote::get_account_address_from_str_or_url(info, m_wallet->nettype(), args[0], oa_prompter);
     de.original = args[0];
+    return true;
 }
 //----------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])
