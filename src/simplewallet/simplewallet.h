@@ -121,7 +121,7 @@ namespace cryptonote
      *
      * \return success status
      */
-    void create_xmrto_transaction(const std::string btcAddress, const std::string btcAmount, cryptonote::tx_destination_entry&, address_parse_info&);
+    bool create_xmrto_transaction(const std::string btcAddress, const std::string btcAmount, cryptonote::tx_destination_entry&, address_parse_info&);
     bool seed_set_language(const std::vector<std::string> &args = std::vector<std::string>());
     bool set_always_confirm_transfers(const std::vector<std::string> &args = std::vector<std::string>());
     bool set_print_ring_members(const std::vector<std::string> &args = std::vector<std::string>());
