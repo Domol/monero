@@ -5,7 +5,7 @@ cd /monero/build
 echo $'\nBuilding monero-wallet-cli...\n'
 if [ ! -d "bin" ]; then
   # Control will enter here if bin doesn't exist.
-  cmake ..
+  cmake .. -DMANUAL_SUBMODULES=1
 fi
 make simplewallet
 echo $'Built wallet is in:'
