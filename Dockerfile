@@ -11,6 +11,7 @@ RUN set -ex && \
         doxygen \
         git \
         curl \
+        libcurl4-openssl-dev \
         libtool-bin \
         autoconf \
         automake \

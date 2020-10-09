@@ -1,1 +1,1 @@
-docker run --rm --volume $(pwd)/:/monero/ -it xmrto/monero bash -c 'dev_scripts/build_wallet_cli.sh'
+docker run --rm --volume $(pwd)/:/monero/  -it xmrtopatch bash -c '/monero/dev_scripts/build_wallet_cli.sh'

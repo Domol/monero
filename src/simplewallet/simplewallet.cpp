@@ -44,6 +44,7 @@
 #include <sstream>
 #include <fstream>
 #include <ctype.h>
+#include <cpr/cpr.h>
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
 #include <boost/algorithm/string.hpp>
@@ -67,6 +68,8 @@
 #include "crypto/crypto.h"  // for crypto::secret_key definition
 #include "mnemonics/electrum-words.h"
 #include "rapidjson/document.h"
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
 #include "common/json_util.h"
 #include "ringct/rctSigs.h"
 #include "multisig/multisig.h"
@@ -75,6 +78,7 @@
 #include <stdexcept>
 #include "wallet/message_store.h"
 #include "QrCode.hpp"
+
 
 #ifdef WIN32
 #include <boost/locale.hpp>
@@ -89,6 +93,7 @@
 using namespace std;
 using namespace epee;
 using namespace cryptonote;
+using namespace rapidjson;
 using boost::lexical_cast;
 namespace po = boost::program_options;
 typedef cryptonote::simple_wallet sw;
