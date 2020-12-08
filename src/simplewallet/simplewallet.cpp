@@ -395,16 +395,17 @@ string create_order(string btcAddress, string btcAmount, bool isStagenet) {
     Value address_value(btcAddress.c_str(), allocator);
     Value address_key(key_address.c_str(), allocator);
     d.AddMember(address_key, address_value, allocator);
-    string key_amount = "btc_amount";
+    string key_amount = "amount";
     Value amount_value(btcAmount.c_str(), allocator);
     Value amount_key(key_amount.c_str(), allocator);
     d.AddMember(amount_key, amount_value, allocator);
+    d.AddMember("amount_currency", "BTC", allocator);
 
     // Convert JSON document to string
     rapidjson::StringBuffer strbuf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
     d.Accept(writer);
-    auto response = make_xmrto_post_request(strbuf.GetString(), xmrUrlBase + "api/v2/xmr2btc/order_create/");
+    auto response = make_xmrto_post_request(strbuf.GetString(), xmrUrlBase + "api/v3/xmr2btc/order_create/");
     rapidjson::Document responseJson;
     responseJson.Parse(response.text.c_str());
     if(responseJson.HasMember("uuid")) {
@@ -430,7 +431,7 @@ rapidjson::Document get_order_info(string orderUuid, bool isStagenet) {
     rapidjson::StringBuffer strbuf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
     d.Accept(writer);
-    auto response = make_xmrto_post_request(strbuf.GetString(), xmrUrlBase + "api/v2/xmr2btc/order_status_query/");
+    auto response = make_xmrto_post_request(strbuf.GetString(), xmrUrlBase + "api/v3/xmr2btc/order_status_query/");
     rapidjson::Document responseJson;
     responseJson.Parse(response.text.c_str());
     return responseJson;
@@ -442,8 +443,8 @@ void wait_for_order_state(string orderUuid, string state, bool isStagenet) {
 
 std::vector<std::string> get_transaction_data(string orderUuid, bool isStagenet) {
     rapidjson::Document orderData = get_order_info(orderUuid, isStagenet);
-    double amountToPay = orderData["xmr_amount_remaining"].GetDouble();
-    string integratedAddress = orderData["xmr_receiving_integrated_address"].GetString();
+    double amountToPay = stod(orderData["remaining_amount_incoming"].GetString());
+    string integratedAddress = orderData["receiving_subaddress"].GetString();
     success_msg_writer() <<"Address to send XMR: "<<integratedAddress;
     success_msg_writer() <<"Amount to pay: "<<amountToPay<<"\n";
     std::vector<std::string> local_args = {};
