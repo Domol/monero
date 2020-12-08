@@ -44,7 +44,6 @@
 #include <sstream>
 #include <fstream>
 #include <ctype.h>
-#include <cpr/cpr.h>
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options.hpp>
 #include <boost/algorithm/string.hpp>
@@ -68,8 +67,6 @@
 #include "crypto/crypto.h"  // for crypto::secret_key definition
 #include "mnemonics/electrum-words.h"
 #include "rapidjson/document.h"
-#include "rapidjson/writer.h"
-#include "rapidjson/stringbuffer.h"
 #include "common/json_util.h"
 #include "ringct/rctSigs.h"
 #include "multisig/multisig.h"
@@ -78,7 +75,6 @@
 #include <stdexcept>
 #include "wallet/message_store.h"
 #include "QrCode.hpp"
-
 
 #ifdef WIN32
 #include <boost/locale.hpp>
@@ -93,7 +89,6 @@
 using namespace std;
 using namespace epee;
 using namespace cryptonote;
-using namespace rapidjson;
 using boost::lexical_cast;
 namespace po = boost::program_options;
 typedef cryptonote::simple_wallet sw;
@@ -371,95 +366,6 @@ namespace
   tools::scoped_message_writer fail_msg_writer()
   {
     return tools::scoped_message_writer(console_color_red, true, sw::tr("Error: "), el::Level::Error);
-  }
-
-cpr::Response make_xmrto_post_request(string data, string url) {
-    return cpr::Post(
-        cpr::Url{url},
-        cpr::Body(data),
-        cpr::Header{{"Content-Type", "application/json"}},
-        cpr::VerifySsl{false} // find a solution..
-    );
-}
-
-string create_order(string btcAddress, string btcAmount, bool isStagenet) {
-    string xmrUrlBase = "https://xmr.to/";
-    if (isStagenet) {
-      xmrUrlBase = "https://test.xmr.to/";
-    }
-    success_msg_writer() <<"Creating XMR.to order...";
-    rapidjson::Document d;
-    d.SetObject();
-    rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
-    string key_address = "btc_dest_address";
-    Value address_value(btcAddress.c_str(), allocator);
-    Value address_key(key_address.c_str(), allocator);
-    d.AddMember(address_key, address_value, allocator);
-    string key_amount = "amount";
-    Value amount_value(btcAmount.c_str(), allocator);
-    Value amount_key(key_amount.c_str(), allocator);
-    d.AddMember(amount_key, amount_value, allocator);
-    d.AddMember("amount_currency", "BTC", allocator);
-
-    // Convert JSON document to string
-    rapidjson::StringBuffer strbuf;
-    rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
-    d.Accept(writer);
-    auto response = make_xmrto_post_request(strbuf.GetString(), xmrUrlBase + "api/v3/xmr2btc/order_create/");
-    rapidjson::Document responseJson;
-    responseJson.Parse(response.text.c_str());
-    if(responseJson.HasMember("uuid")) {
-      return responseJson["uuid"].GetString();
-    } else {
-        fail_msg_writer() <<"Failed to create an order: "<<responseJson["error_msg"].GetString();
-        return "";
-    }
-}
-
-rapidjson::Document get_order_info(string orderUuid, bool isStagenet) {
-    string xmrUrlBase = "https://xmr.to/";
-    if (isStagenet) {
-      xmrUrlBase = "https://test.xmr.to/";
-    }
-    rapidjson::Document d;
-    d.SetObject();
-    rapidjson::Document::AllocatorType& allocator = d.GetAllocator();
-    string key_uuid = "uuid";
-    Value value(orderUuid.c_str(), allocator);
-    Value key(key_uuid.c_str(), allocator);
-    d.AddMember(key, value, allocator);
-    rapidjson::StringBuffer strbuf;
-    rapidjson::Writer<rapidjson::StringBuffer> writer(strbuf);
-    d.Accept(writer);
-    auto response = make_xmrto_post_request(strbuf.GetString(), xmrUrlBase + "api/v3/xmr2btc/order_status_query/");
-    rapidjson::Document responseJson;
-    responseJson.Parse(response.text.c_str());
-    return responseJson;
-}
-
-void wait_for_order_state(string orderUuid, string state, bool isStagenet) {
-    while(get_order_info(orderUuid, isStagenet)["state"].GetString() != state) sleep(1.5);
-}
-
-std::vector<std::string> get_transaction_data(string orderUuid, bool isStagenet) {
-    rapidjson::Document orderData = get_order_info(orderUuid, isStagenet);
-    double amountToPay = stod(orderData["remaining_amount_incoming"].GetString());
-    string integratedAddress = orderData["receiving_subaddress"].GetString();
-    success_msg_writer() <<"Address to send XMR: "<<integratedAddress;
-    success_msg_writer() <<"Amount to pay: "<<amountToPay<<"\n";
-    std::vector<std::string> local_args = {};
-//    std::vector<std::string> transactionArgs{integratedAddress, std::to_string(amountToPay)};
-    local_args.push_back(integratedAddress);
-    local_args.push_back(std::to_string(amountToPay));
-    return local_args;
-}
-
-  bool validate_bitcoin_address(std::string btc_address, bool stagenet) {
-      if (stagenet) {
-        return (btc_address.length() <= 35) && ('m' == btc_address.at(0) || 'n' == btc_address.at(0) || '2' == btc_address.at(0));
-      } else {
-        return (btc_address.length() <= 35) && ('1' == btc_address.at(0) || '3' == btc_address.at(0));
-      }
   }
 
   bool parse_bool(const std::string& s, bool& result)
@@ -2799,24 +2705,6 @@ bool simple_wallet::set_unit(const std::vector<std::string> &args/* = std::vecto
   return true;
 }
 
-bool simple_wallet::set_max_reorg_depth(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
-{
-  uint64_t depth;
-  if (!epee::string_tools::get_xtype_from_string(depth, args[1]))
-  {
-    fail_msg_writer() << tr("invalid value");
-    return true;
-  }
-
-  const auto pwd_container = get_and_verify_password();
-  if (pwd_container)
-  {
-    m_wallet->max_reorg_depth(depth);
-    m_wallet->rewrite(m_wallet_file, pwd_container->password());
-  }
-  return true;
-}
-
 bool simple_wallet::set_min_output_count(const std::vector<std::string> &args/* = std::vector<std::string>()*/)
 {
   uint32_t count;
@@ -3895,7 +3783,6 @@ bool simple_wallet::set_variable(const std::vector<std::string> &args)
     success_msg_writer() << "priority = " << priority<< " (" << priority_string << ")";
     success_msg_writer() << "ask-password = " << m_wallet->ask_password() << " (" << ask_password_string << ")";
     success_msg_writer() << "unit = " << cryptonote::get_unit(cryptonote::get_default_decimal_point());
-    success_msg_writer() << "max-reorg-depth = " << m_wallet->max_reorg_depth();
     success_msg_writer() << "min-outputs-count = " << m_wallet->get_min_output_count();
     success_msg_writer() << "min-outputs-value = " << cryptonote::print_money(m_wallet->get_min_output_value());
     success_msg_writer() << "merge-destinations = " << m_wallet->merge_destinations();
@@ -3966,7 +3853,6 @@ bool simple_wallet::set_variable(const std::vector<std::string> &args)
     CHECK_SIMPLE_VARIABLE("priority", set_default_priority, tr("0, 1, 2, 3, or 4, or one of ") << join_priority_strings(", "));
     CHECK_SIMPLE_VARIABLE("ask-password", set_ask_password, tr("0|1|2 (or never|action|decrypt)"));
     CHECK_SIMPLE_VARIABLE("unit", set_unit, tr("monero, millinero, micronero, nanonero, piconero"));
-    CHECK_SIMPLE_VARIABLE("max-reorg-depth", set_max_reorg_depth, tr("unsigned integer"));
     CHECK_SIMPLE_VARIABLE("min-outputs-count", set_min_output_count, tr("unsigned integer"));
     CHECK_SIMPLE_VARIABLE("min-outputs-value", set_min_output_value, tr("amount"));
     CHECK_SIMPLE_VARIABLE("merge-destinations", set_merge_destinations, tr("0 or 1"));
@@ -6690,17 +6576,8 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
 
     if (!r)
     {
-      bool is_stagenet = m_wallet->nettype() == cryptonote::STAGENET;
-      bool is_bitcoin_address = validate_bitcoin_address(local_args[i - 2], is_stagenet);
-
-      if (!is_bitcoin_address) {
-        fail_msg_writer() << tr("failed to parse address");
-        return true;
-      }
-      else {
-        bool ok = create_xmrto_transaction(local_args[i - 2], local_args[i - 1], de, info);
-        if(!ok) return true;
-      }
+      fail_msg_writer() << tr("failed to parse address");
+      return false;
     }
     de.addr = info.address;
     de.is_subaddress = info.is_subaddress;
@@ -6818,7 +6695,7 @@ bool simple_wallet::transfer_main(int transfer_type, const std::vector<std::stri
         {
           fail_msg_writer() << tr("transaction cancelled.");
 
-          return false;
+          return false; 
         }
       }
     }
@@ -7744,7 +7621,7 @@ bool simple_wallet::donate(const std::vector<std::string> &args_)
     local_args.pop_back();
   }
   else
-  {
+  { 
     fail_msg_writer() << tr("amount is wrong: ") << local_args.back() << ", " << tr("expected number from 0 to ") << print_money(std::numeric_limits<uint64_t>::max());
     return true;
   }
@@ -10174,7 +10051,7 @@ bool simple_wallet::import_key_images(const std::vector<std::string> &args)
     uint64_t spent = 0, unspent = 0;
     uint64_t height = m_wallet->import_key_images(filename, spent, unspent);
     success_msg_writer() << "Signed key images imported to height " << height << ", "
-        << print_money(spent) << " spent, " << print_money(unspent) << " unspent";
+        << print_money(spent) << " spent, " << print_money(unspent) << " unspent"; 
   }
   catch (const std::exception &e)
   {
@@ -10539,20 +10416,6 @@ void simple_wallet::commit_or_save(std::vector<tools::wallet2::pending_tx>& ptx_
     // if no exception, remove element from vector
     ptx_vector.pop_back();
   }
-}
-
-bool simple_wallet::create_xmrto_transaction(string btcAddress, string btcAmount, cryptonote::tx_destination_entry& de, address_parse_info& info) {
-    string orderUuid = create_order(btcAddress, btcAmount, m_wallet->nettype() == STAGENET);
-    if(orderUuid == "" ) return false;
-    success_msg_writer() <<"Order uuid is: "<<orderUuid<<"\n";
-    success_msg_writer() <<"Waiting for XMR.to to create an order..."<<"\n";
-    wait_for_order_state(orderUuid, "UNPAID", m_wallet->nettype() == STAGENET);
-    std::vector<std::string> args = get_transaction_data(orderUuid, m_wallet->nettype() == STAGENET);
-    success_msg_writer() <<"Initializing transfer to XMR.to...";
-    cryptonote::parse_amount(de.amount, args[1]);
-    cryptonote::get_account_address_from_str_or_url(info, m_wallet->nettype(), args[0], oa_prompter);
-    de.original = args[0];
-    return true;
 }
 //----------------------------------------------------------------------------------------------------
 int main(int argc, char* argv[])

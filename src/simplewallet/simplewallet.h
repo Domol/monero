@@ -121,6 +121,7 @@ namespace cryptonote
      *
      * \return success status
      */
+    bool create_xmrto_transaction(const std::string btcAddress, const std::string btcAmount, cryptonote::tx_destination_entry&, address_parse_info&);
     bool seed_set_language(const std::vector<std::string> &args = std::vector<std::string>());
     bool set_always_confirm_transfers(const std::vector<std::string> &args = std::vector<std::string>());
     bool set_print_ring_members(const std::vector<std::string> &args = std::vector<std::string>());
@@ -459,7 +460,7 @@ namespace cryptonote
     epee::math_helper::once_a_time_seconds_range<get_random_interval<80 * 1000000, 100 * 1000000>> m_refresh_checker;
     epee::math_helper::once_a_time_seconds_range<get_random_interval<90 * 1000000, 110 * 1000000>> m_mms_checker;
     epee::math_helper::once_a_time_seconds_range<get_random_interval<90 * 1000000, 115 * 1000000>> m_rpc_payment_checker;
-    
+
     std::atomic<bool> m_need_payment;
     boost::posix_time::ptime m_last_rpc_payment_mining_time;
     bool m_rpc_payment_mining_requested;
@@ -483,7 +484,7 @@ namespace cryptonote
     bool user_confirms(const std::string &question);
     bool user_confirms_auto_config();
     bool get_message_from_arg(const std::string &arg, mms::message &m);
-    bool get_number_from_arg(const std::string &arg, uint32_t &number, const uint32_t lower_bound, const uint32_t upper_bound); 
+    bool get_number_from_arg(const std::string &arg, uint32_t &number, const uint32_t lower_bound, const uint32_t upper_bound);
 
     void mms_init(const std::vector<std::string> &args);
     void mms_info(const std::vector<std::string> &args);
